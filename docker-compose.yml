@@ -10,6 +10,7 @@ services:
     ports:
       - "3306:3306"
     expose:
+      # Opens port 3306 on the container
       - '3306'
     volumes:
       - D:/RocketSeat/mysql/mysql:/var/lib/mysql

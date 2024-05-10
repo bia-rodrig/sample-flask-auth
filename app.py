@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from models.user import User
 from database import db
 from flask_login import LoginManager, login_user, current_user, logout_user, login_required
+import bcrypt
 
 app = Flask(__name__)
 
@@ -26,7 +27,12 @@ def login():
 
 	if username and password:
 		user = User.query.filter_by(username=username).first()
-		if user and user.password == password:
+
+		# password -> senha digitada pelo usuário no front
+		# user.password -> informação recuperada no banco de dados
+		# os dois são transformados em bytes e comparados
+
+		if user and bcrypt.checkpw(str.encode(password), str.encode(user.password)) == password:
 				login_user(user)
 				print(current_user.is_authenticated)
 				return jsonify({'message': 'Autenticação OK'})
@@ -40,15 +46,15 @@ def logout():
 	return jsonify({'message': 'logout realizado com sucesso.'})
 
 @app.route('/user', methods=['POST'])
-#@login_required -> se colocar essa linha, somente usuários cadastrados poderiam adicionar novos usuários
 def create_user():
 	data = request.json
 	username = data.get('username')
 	password = data.get('password')
 	if username and password:
-		user = User(username=username, password=password, role='user')
-		# não precisaria colocar o role='user', porque isso já foi definido no user.py
-		# porém é bom colocar, para que o próximo programador saiba que o valor padrão é o user
+		# encode -> transforma o password em bytes
+		# gensalt -> gera palavras aleatórias para gerar o hash
+		hashed_password = bcrypt.hashpw(str.encode(password), bcrypt.gensalt())
+		user = User(username=username, password=hashed_password, role='user')
 		db.session.add(user)
 		db.session.commit()
 		return jsonify({'message':'Usuario cadastrado com sucesso'})
@@ -63,8 +69,6 @@ def read_user(id_user):
 		return {'username': user.username}
 	return jsonify({'message': 'Usuário não encontrado'}), 404
 
-
-# para atualizar senha, ou tem q ser o próprio usuário, ou tem que ser um usuário administrador
 @app.route('/user/<int:id_user>', methods=['PUT'])
 @login_required
 def update_user(id_user):
@@ -72,12 +76,11 @@ def update_user(id_user):
 	password = data.get('password')
 	user = User.query.get(id_user)
 
-	# para atualizar senha, ou tem q ser o próprio usuário, ou tem que ser um usuário administrador
 	if id_user != current_user.id and current_user.role == 'user':
 		return jsonify({'message': 'operação não permitida'}), 403
 	
 	if user and password:
-		user.password = password        
+		user.password = bcrypt.hashpw(str.encode(password), bcrypt.gensalt())       
 		db.session.commit()
 		return jsonify({'message': f'Usuario {id_user} atualizado com sucesso'})
 	return jsonify({'message': 'Usuário não encontrado'}), 404
